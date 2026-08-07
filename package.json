@@ -1,0 +1,12 @@
+{
+  "name": "anydoc-studio",
+  "version": "1.0.0",
+  "description": "Privacy-first document workbench that runs entirely in your browser.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "serve": "python serve.py 8777",
+    "test": "node --test"
+  }
+}

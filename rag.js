@@ -41,7 +41,7 @@ async function ollamaEmbed(text, cfg) {
   return j.embedding;
 }
 
-function cosine(a, b) {
+export function cosine(a, b) {
   let d = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
   return d / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9);
