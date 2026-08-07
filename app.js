@@ -1878,6 +1878,55 @@ $('ask-go').addEventListener('click', askDoc);
 $('ask-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') askDoc(); });
 
 // ============================================================
+//  Storage manager modal
+// ============================================================
+function derivedSize(rec) {
+  let raster = 0, embed = 0;
+  (rec.ocrPages || []).forEach((p) => { if (p.raster) raster += p.raster.length; });
+  if (rec.ragIndex) embed = rec.ragIndex.length * 768 * 8; // ~Float64 per dim
+  return { raster, embed, total: raster + embed };
+}
+async function renderStorage() {
+  const list = $('stor-list');
+  const usage = $('stor-usage');
+  list.innerHTML = '';
+  let est = null;
+  try { est = await navigator.storage.estimate(); } catch { /* unsupported */ }
+  if (est) {
+    const usedMB = (est.usage / 1048576).toFixed(1);
+    const quotaMB = (est.quota / 1048576).toFixed(0);
+    const pct = Math.min(100, Math.round((est.usage / est.quota) * 100));
+    usage.innerHTML = `<div class="stor-bar"><div class="stor-fill" style="width:${pct}%"></div></div>
+      <div class="stor-usage-txt"><b>${usedMB} MB</b> usados de ${quotaMB} MB (${pct}%)</div>`;
+  } else { usage.textContent = ''; }
+
+  if (!docs.size) { list.append(el('div', 'gloss-empty', 'Nenhum documento armazenado.')); return; }
+  for (const rec of docs.values()) {
+    const d = derivedSize(rec);
+    const row = el('div', 'gloss-row');
+    const meta = el('div', 'stor-meta');
+    meta.append(el('div', 'stor-name', rec.name));
+    meta.append(el('div', 'stor-sub', `original ${fmtBytes(rec.size)} · derivados ${fmtBytes(d.total)}`
+      + (rec.ragIndex ? ` · ${rec.ragIndex.length} embeddings` : '')));
+    row.append(meta);
+    const clr = el('button', 'ghost-btn sm', 'Limpar pesados');
+    clr.disabled = d.total === 0;
+    clr.addEventListener('click', () => {
+      (rec.ocrPages || []).forEach((p) => { delete p.raster; });
+      rec._posUrls?.forEach((u) => URL.revokeObjectURL(u));
+      rec.ragIndex = null; rec.ragFor = null;
+      saveDoc(rec);
+      renderStorage();
+    });
+    row.append(clr);
+    list.append(row);
+  }
+}
+$('storage-btn').addEventListener('click', () => { renderStorage(); $('storage-modal').hidden = false; });
+$('storage-close').addEventListener('click', () => { $('storage-modal').hidden = true; });
+$('storage-modal').addEventListener('click', (e) => { if (e.target.id === 'storage-modal') $('storage-modal').hidden = true; });
+
+// ============================================================
 //  Word bank (glossary) modal
 // ============================================================
 function renderGlossary(filter = '') {

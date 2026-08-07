@@ -429,6 +429,16 @@ button{font:inherit;color:inherit;cursor:pointer}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ask-cite-t{color:var(--text-muted);line-height:1.45}
 
+/* ===================== STORAGE MANAGER ===================== */
+.stor-usage{margin:2px 0 16px}
+.stor-bar{height:9px;border-radius:20px;background:var(--alpha-8);overflow:hidden;margin-bottom:7px}
+.stor-fill{height:100%;background:var(--heat);border-radius:20px;transition:width .3s}
+.stor-usage-txt{font-family:var(--mono);font-size:11.5px;color:var(--text-muted)}
+.stor-usage-txt b{color:var(--text)}
+.stor-meta{flex:1;min-width:0}
+.stor-name{font-size:13px;font-weight:450;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stor-sub{font-family:var(--mono);font-size:11px;color:var(--text-muted);margin-top:2px}
+
 /* ===================== WORD BANK ===================== */
 .gloss-toolbar{display:flex;align-items:center;gap:8px;margin:4px 0 12px}
 .gloss-toolbar .spacer{flex:1}
