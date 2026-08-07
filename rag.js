@@ -6,7 +6,7 @@
 //  configured — with citations. No backend, no upload.
 // ============================================================
 
-import { loadCfg, chat } from './translate.js';
+import { loadCfg, chat, chatStream } from './translate.js';
 
 const EMBED_MODEL = 'nomic-embed-text';
 
@@ -69,10 +69,9 @@ export async function retrieve(question, index, k = 5) {
     .slice(0, k);
 }
 
-/** Answer a question grounded in the retrieved passages, with citations. */
-export async function answer(question, passages, cfg, signal) {
+function answerPrompt(question, passages) {
   const context = passages.map((p, n) => `[${n + 1}] ${p.text}`).join('\n\n');
-  const prompt = `Você é um assistente que responde SOMENTE com base nos trechos do documento abaixo.
+  return `Você é um assistente que responde SOMENTE com base nos trechos do documento abaixo.
 Regras: responda na língua da pergunta; seja preciso e conciso; cite os trechos usados como [n]; se a resposta não estiver nos trechos, diga "Não encontrei isso no documento."
 
 Trechos:
@@ -81,5 +80,14 @@ ${context}
 Pergunta: ${question}
 
 Resposta:`;
-  return chat(prompt, cfg, signal);
+}
+
+/** Answer a question grounded in the retrieved passages, with citations. */
+export async function answer(question, passages, cfg, signal) {
+  return chat(answerPrompt(question, passages), cfg, signal);
+}
+
+/** Streaming variant — onToken(delta, full) is called as the answer arrives. */
+export async function answerStream(question, passages, cfg, onToken, signal) {
+  return chatStream(answerPrompt(question, passages), cfg, onToken, signal);
 }

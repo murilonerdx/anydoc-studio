@@ -12,7 +12,7 @@ import { marked } from './vendor/marked/marked.esm.js';
 import { paddleRecognize } from './paddle.js';
 import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS } from './translate.js';
 import { scrapeUrl, loadScrapeCfg, saveScrapeCfg } from './scrape.js';
-import { buildIndex, retrieve, answer as ragAnswer } from './rag.js';
+import { buildIndex, retrieve, answerStream as ragAnswerStream } from './rag.js';
 
 // ---- tiny helpers ----
 const $ = (id) => document.getElementById(id);
@@ -1791,12 +1791,18 @@ async function askDoc() {
     status.textContent = 'Buscando trechos relevantes…';
     const hits = await retrieve(q, rec._ragIndex, 5);
     status.textContent = 'Gerando resposta…';
-    const text = await ragAnswer(q, hits, loadCfg());
 
-    status.remove();
-    const ans = el('div', 'ask-a');
-    ans.innerHTML = marked.parse(text || '_(sem resposta)_');
+    // Stream the answer into the bubble, re-rendering Markdown at a light cadence.
+    const ans = el('div', 'ask-a streaming');
     turn.append(ans);
+    status.remove();
+    let last = 0;
+    const full = await ragAnswerStream(q, hits, loadCfg(), (_delta, acc) => {
+      const now = performance.now();
+      if (now - last > 90) { ans.innerHTML = marked.parse(acc); last = now; ans.scrollIntoView({ block: 'nearest' }); }
+    });
+    ans.classList.remove('streaming');
+    ans.innerHTML = marked.parse(full || '_(sem resposta)_');
 
     const cites = el('details', 'ask-cites');
     cites.append(el('summary', null, `${hits.length} trechos usados`));

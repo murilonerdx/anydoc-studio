@@ -242,6 +242,50 @@ export async function chat(prompt, cfg, signal) {
   return llmComplete(prompt, c, signal);
 }
 
+/** Streaming completion — calls onToken(delta, full) as text arrives.
+ *  Ollama (NDJSON) and OpenAI-compatible (SSE); others fall back to Ollama. */
+export async function chatStream(prompt, cfg, onToken, signal) {
+  const c = (cfg.provider === 'ollama' || cfg.provider === 'openai') ? cfg : { ...cfg, provider: 'ollama' };
+  const isOllama = c.provider === 'ollama';
+  const url = isOllama
+    ? (c.ollamaUrl || DEFAULT_CFG.ollamaUrl).replace(/\/+$/, '') + '/api/generate'
+    : (c.apiBase || DEFAULT_CFG.apiBase).replace(/\/+$/, '') + '/chat/completions';
+  const body = isOllama
+    ? { model: c.ollamaModel || 'llama3.1', prompt, stream: true, options: { temperature: 0.1 } }
+    : { model: c.apiModel || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.1, stream: true };
+  const res = await fetch(url, {
+    method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', ...(isOllama ? {} : { Authorization: 'Bearer ' + (c.apiKey || '') }) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${isOllama ? 'Ollama' : 'API'} respondeu ${res.status}.`);
+  if (!res.body) return chat(prompt, cfg, signal); // no stream support → one-shot
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', full = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      if (isOllama) {
+        try { const j = JSON.parse(line); if (j.response) { full += j.response; onToken?.(j.response, full); } } catch { /* partial */ }
+      } else {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try { const t = JSON.parse(data).choices?.[0]?.delta?.content; if (t) { full += t; onToken?.(t, full); } } catch { /* partial */ }
+      }
+    }
+  }
+  return full;
+}
+
 /** Connectivity/health check per provider. */
 export async function testConnection(cfg) {
   if (cfg.provider === 'bergamot') {
