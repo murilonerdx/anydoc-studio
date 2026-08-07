@@ -22,6 +22,8 @@ export const DEFAULT_CFG = {
   libreUrl: 'http://localhost:5000',
   libreKey: '',
   target: 'Português',
+  embedModel: 'nomic-embed-text',
+  answerModel: '', // dedicated LLM for the Ask/RAG panel; falls back to ollamaModel
 };
 
 const CFG_KEY = 'anydoc-studio-translate';

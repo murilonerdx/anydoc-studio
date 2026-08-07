@@ -92,7 +92,8 @@ function saveDoc(rec) {
       pdfOptions: rec.pdfOptions, ocrLang: rec.ocrLang, ocrEngine: rec.ocrEngine,
       ocrMarkdown: rec.ocrMarkdown || null, ocrPages: rec.ocrPages || null,
       translations: rec.translations || null, trTarget: rec.trTarget || null,
-      isWeb: rec.isWeb || false, sourceUrl: rec.sourceUrl || null, docType: rec.docType || null })
+      isWeb: rec.isWeb || false, sourceUrl: rec.sourceUrl || null, docType: rec.docType || null,
+      ragIndex: rec.ragIndex || null, ragFor: rec.ragFor || null })
   );
 }
 function deleteStoredDoc(id) { return idbRun('readwrite', (s) => s.delete(id)); }
@@ -122,7 +123,8 @@ async function restoreDocs() {
     intake(d.name, d.bytes instanceof Uint8Array ? d.bytes : new Uint8Array(d.bytes), d.size,
       { id: d.id, ord: d.ord, pdfOptions: d.pdfOptions, ocrLang: d.ocrLang, ocrEngine: d.ocrEngine, ocrMarkdown: d.ocrMarkdown, ocrPages: d.ocrPages,
       translations: d.translations, trTarget: d.trTarget,
-      isWeb: d.isWeb, sourceUrl: d.sourceUrl, docType: d.docType, fromStore: true });
+      isWeb: d.isWeb, sourceUrl: d.sourceUrl, docType: d.docType,
+      ragIndex: d.ragIndex, ragFor: d.ragFor, fromStore: true });
     if (!first) first = d.id;
   }
   if (first) setActive(first);
@@ -227,6 +229,7 @@ function intake(name, bytes, size, opts = {}) {
   const rec = {
     id, name, base, bytes, size: size ?? bytes.length, format, isImage, imageExt: ext,
     isWeb, sourceUrl: opts.sourceUrl || null, docType: opts.docType || null,
+    ragIndex: opts.ragIndex || null, ragFor: opts.ragFor || null,
     status: 'pending', assetUrls: [],
     ord: opts.ord ?? id,
     pdfOptions: opts.pdfOptions || { profile: 'fidelity', pageMarkers: false },
@@ -1761,12 +1764,16 @@ if (savedTheme) document.body.dataset.theme = savedTheme;
 //  Ask (in-browser RAG over the active document)
 // ============================================================
 let asking = false;
+// Build or reuse a document's embedding index. The index is persisted and
+// reused across reloads; it is rebuilt only when the document's text changes.
 async function ensureIndex(rec, status) {
-  if (!rec._ragIndex) {
-    status.textContent = `Indexando ${rec.name}…`;
-    rec._ragIndex = await buildIndex(rec.markdown, (i, n) => { status.textContent = `Indexando ${rec.name} ${i}/${n}…`; });
-  }
-  return rec._ragIndex;
+  const len = (rec.markdown || '').length;
+  if (rec.ragIndex && rec.ragFor === len) return rec.ragIndex;
+  status.textContent = `Indexando ${rec.name}…`;
+  rec.ragIndex = await buildIndex(rec.markdown, (i, n) => { status.textContent = `Indexando ${rec.name} ${i}/${n}…`; });
+  rec.ragFor = len;
+  saveDoc(rec);
+  return rec.ragIndex;
 }
 async function askDoc() {
   if (asking) return;
@@ -1810,8 +1817,12 @@ async function askDoc() {
     const ans = el('div', 'ask-a streaming');
     turn.append(ans);
     status.remove();
+    // Use a dedicated answer model when set (an instruction model beats a
+    // translation-only model for Q&A).
+    const ansCfg = loadCfg();
+    if (ansCfg.answerModel) ansCfg.ollamaModel = ansCfg.answerModel;
     let last = 0;
-    const full = await ragAnswerStream(q, hits, loadCfg(), (_delta, acc) => {
+    const full = await ragAnswerStream(q, hits, ansCfg, (_delta, acc) => {
       const now = performance.now();
       if (now - last > 90) { ans.innerHTML = marked.parse(acc); last = now; ans.scrollIntoView({ block: 'nearest' }); }
     });
@@ -1914,6 +1925,8 @@ function fillSettings() {
   $('cfg-libre-url').value = c.libreUrl;
   $('cfg-libre-key').value = c.libreKey;
   $('cfg-target').value = c.target;
+  $('cfg-answer-model').value = c.answerModel || '';
+  $('cfg-embed-model').value = c.embedModel || 'nomic-embed-text';
   $('cfg-proxy').value = loadScrapeCfg().proxyUrl || '';
 }
 function readSettings() {
@@ -1928,6 +1941,8 @@ function readSettings() {
     libreUrl: $('cfg-libre-url').value.trim() || DEFAULT_CFG.libreUrl,
     libreKey: $('cfg-libre-key').value,
     target: $('cfg-target').value.trim() || DEFAULT_CFG.target,
+    answerModel: $('cfg-answer-model').value.trim(),
+    embedModel: $('cfg-embed-model').value.trim() || DEFAULT_CFG.embedModel,
   };
 }
 async function refreshOllamaModels() {

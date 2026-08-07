@@ -223,6 +223,15 @@
             Precisa do Ollama rodando e permitir esta origem:
             <code>OLLAMA_ORIGINS=http://127.0.0.1:8777 ollama serve</code>
           </p>
+          <div class="field">
+            <label for="cfg-answer-model">Modelo de resposta — aba Perguntar <span class="dim">(opcional)</span></label>
+            <input id="cfg-answer-model" type="text" placeholder="ex.: llama3.2:3b (vazio = usa o modelo acima)" list="ollama-models" autocomplete="off" />
+            <p class="field-hint">Para perguntas, prefira um modelo de <strong>instrução</strong> (llama3.2, qwen2.5) — não um de tradução.</p>
+          </div>
+          <div class="field">
+            <label for="cfg-embed-model">Modelo de embeddings — Perguntar</label>
+            <input id="cfg-embed-model" type="text" placeholder="nomic-embed-text" list="ollama-models" autocomplete="off" />
+          </div>
         </div>
 
         <div class="provider-block" data-provider="bergamot" hidden>
