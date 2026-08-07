@@ -13,6 +13,7 @@ import { paddleRecognize } from './paddle.js';
 import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS } from './translate.js';
 import { scrapeUrl, loadScrapeCfg, saveScrapeCfg } from './scrape.js';
 import { buildIndex, retrieve, answerStream as ragAnswerStream } from './rag.js';
+import { exportTranslatedPDF } from './export.js';
 
 // ---- tiny helpers ----
 const $ = (id) => document.getElementById(id);
@@ -1104,9 +1105,11 @@ async function renderTranslation(rec) {
   prog.style.marginLeft = 'auto';
   tb.append(prog);
 
-  const dl = el('button', 'ghost-btn sm', 'Baixar tradução .md');
+  const hasTr = rec.translations.some((pg) => pg.some(Boolean));
+
+  const dl = el('button', 'ghost-btn sm', 'Baixar .md');
   dl.id = 'tr-download';
-  dl.hidden = !rec.translations.some((pg) => pg.some(Boolean));
+  dl.hidden = !hasTr;
   dl.addEventListener('click', () => {
     const md = rebuildTranslatedMarkdown(rec);
     const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
@@ -1115,6 +1118,24 @@ async function renderTranslation(rec) {
     URL.revokeObjectURL(url);
   });
   tb.append(dl);
+
+  // Export the translated document as a PDF (raster + translation baked in).
+  const dlpdf = el('button', 'ghost-btn sm', 'Baixar PDF traduzido');
+  dlpdf.id = 'tr-download-pdf';
+  dlpdf.hidden = !hasTr;
+  dlpdf.addEventListener('click', async () => {
+    dlpdf.disabled = true;
+    const original = dlpdf.textContent;
+    try {
+      await exportTranslatedPDF(rec, (i, n) => { dlpdf.textContent = `Gerando PDF ${i}/${n}…`; });
+      dlpdf.textContent = 'PDF baixado ✓';
+    } catch (e) {
+      dlpdf.textContent = 'Erro: ' + (e.message || e);
+    } finally {
+      setTimeout(() => { dlpdf.textContent = original; dlpdf.disabled = false; }, 2000);
+    }
+  });
+  tb.append(dlpdf);
 
   // CAT-style workbench: the page (with its regions) on the left, an editable
   // source → target segment list on the right. Hovering a segment lights up
