@@ -110,7 +110,8 @@ In the app: **⚙ Settings → API**. Set the base URL (e.g. `https://api.openai
 
 - The core pipeline (conversion, PDF analysis, OCR, positions, Bergamot translation) runs **on-device**.
 - Uploaded documents are stored only in your browser's IndexedDB and never leave it.
-- The only outbound requests are: (a) lazy-loading OCR/translation runtimes from a public CDN on first use, and (b) translation requests to the engine **you** selected and configured.
+- Tesseract OCR, PDF.js, and every other engine are **bundled** — no CDN at runtime.
+- The only outbound requests are optional and on first use: the PaddleOCR runtime (ONNX Runtime Web) and Bergamot's language models. Translation requests go only to the engine **you** selected and configured.
 
 ## License
 

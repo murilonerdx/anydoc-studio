@@ -17,11 +17,12 @@ CDN (noted as *CDN, on demand*).
 
 | Project | Role | License |
 | --- | --- | --- |
-| [Tesseract.js](https://github.com/naptha/tesseract.js) | In-browser OCR engine (light) — *CDN, on demand* | Apache-2.0 |
+| [Tesseract.js](https://github.com/naptha/tesseract.js) | In-browser OCR engine (light), vendored with its WASM core and language data | Apache-2.0 |
 | [PaddleOCR (PP-OCRv5)](https://github.com/PaddlePaddle/PaddleOCR) | High-accuracy OCR models (ONNX) | Apache-2.0 |
 | [paddleocr.js](https://github.com/X3ZvaWQ/paddleocr.js) | PaddleOCR ONNX runtime for the browser | MIT |
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) | Runs the PaddleOCR models — *CDN, on demand* | MIT |
-| [PDF.js](https://github.com/mozilla/pdf.js) | Rasterises PDF pages for OCR — *CDN, on demand* | Apache-2.0 |
+| [PDF.js](https://github.com/mozilla/pdf.js) | Rasterises PDF pages for OCR (vendored) | Apache-2.0 |
+| [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) | Tesseract language models (eng, por, spa, fra, deu, ita) | Apache-2.0 |
 
 ## Translation
 

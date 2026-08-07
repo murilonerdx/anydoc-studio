@@ -90,10 +90,11 @@ clicking again always works.
 
 ## Offline posture
 
-- The base app (convert, inspect, analyze, Bergamot translate) is fully offline.
-- Tesseract.js, ONNX Runtime Web, and PDF.js are **lazy-loaded from a CDN** the
-  first time OCR is used, then cached by the browser. To be fully offline they can
-  be vendored the same way as the other libraries.
+- The base app (convert, inspect, analyze, OCR, positions, Bergamot translate) is
+  fully offline. Tesseract.js (engine, WASM core, language data) and PDF.js are
+  **vendored** under `vendor/tesseract/` and `vendor/pdfjs/` — no CDN at runtime.
+- ONNX Runtime Web (for the PaddleOCR engine) and Bergamot's language models are
+  still fetched on first use and then cached by the browser.
 - Ollama, LibreTranslate, an API endpoint, and the scraping proxy are all optional
   and only ever contacted at the address the user configures.
 
