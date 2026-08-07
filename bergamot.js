@@ -13,8 +13,9 @@ async function getTranslator() {
   if (!translatorPromise) {
     translatorPromise = (async () => {
       const { BatchTranslator } = await import('./vendor/bergamot/translator.js');
-      // One worker keeps memory modest; the engine caches loaded models.
-      return new BatchTranslator({ workers: 1, cacheSize: 2 ** 13 });
+      // Default registry (bergamot.s3) is CORS-enabled and has en↔{es,pt,de,fr,
+      // it,nl,pl,ru,uk,cs,bg,et,fa}. Non-English pairs pivot through English.
+      return new BatchTranslator({ workers: 1, cacheSize: 2 ** 13, pivotLanguage: 'en' });
     })();
   }
   return translatorPromise;
