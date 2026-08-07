@@ -1761,20 +1761,31 @@ if (savedTheme) document.body.dataset.theme = savedTheme;
 //  Ask (in-browser RAG over the active document)
 // ============================================================
 let asking = false;
+async function ensureIndex(rec, status) {
+  if (!rec._ragIndex) {
+    status.textContent = `Indexando ${rec.name}…`;
+    rec._ragIndex = await buildIndex(rec.markdown, (i, n) => { status.textContent = `Indexando ${rec.name} ${i}/${n}…`; });
+  }
+  return rec._ragIndex;
+}
 async function askDoc() {
   if (asking) return;
   const rec = docs.get(activeId);
   const q = $('ask-input').value.trim();
   const body = $('ask-body');
+  const scope = $('ask-scope').value;
   if (!rec || !q) return;
-  if (!rec.markdown || rec.markdown.length < 20) {
-    body.innerHTML = '<div class="ask-empty">Este documento não tem texto suficiente. Rode o OCR primeiro, se for um scan.</div>';
+
+  const targets = scope === 'all'
+    ? [...docs.values()].filter((d) => d.markdown && d.markdown.length >= 20)
+    : (rec.markdown && rec.markdown.length >= 20 ? [rec] : []);
+  if (!targets.length) {
+    body.innerHTML = '<div class="ask-empty">Nenhum documento com texto suficiente. Rode o OCR nos scans primeiro.</div>';
     return;
   }
+
   asking = true;
   $('ask-go').disabled = true;
-
-  // Question bubble + a status line we update in place.
   const turn = el('div', 'ask-turn');
   turn.append(el('div', 'ask-q', q));
   const status = el('div', 'ask-status', 'Preparando…');
@@ -1784,12 +1795,15 @@ async function askDoc() {
   $('ask-input').value = '';
 
   try {
-    if (!rec._ragIndex) {
-      status.textContent = 'Indexando o documento (uma vez)…';
-      rec._ragIndex = await buildIndex(rec.markdown, (i, n) => { status.textContent = `Indexando ${i}/${n}…`; });
+    // Build/reuse an index per target document, then search across them all.
+    const combined = [];
+    for (const d of targets) {
+      const idx = await ensureIndex(d, status);
+      const tag = targets.length > 1 ? d.name : null;
+      combined.push(...idx.map((c) => ({ ...c, doc: tag })));
     }
     status.textContent = 'Buscando trechos relevantes…';
-    const hits = await retrieve(q, rec._ragIndex, 5);
+    const hits = await retrieve(q, combined, targets.length > 1 ? 6 : 5);
     status.textContent = 'Gerando resposta…';
 
     // Stream the answer into the bubble, re-rendering Markdown at a light cadence.
@@ -1804,12 +1818,14 @@ async function askDoc() {
     ans.classList.remove('streaming');
     ans.innerHTML = marked.parse(full || '_(sem resposta)_');
 
+    const docsUsed = new Set(hits.map((h) => h.doc).filter(Boolean));
     const cites = el('details', 'ask-cites');
-    cites.append(el('summary', null, `${hits.length} trechos usados`));
+    cites.append(el('summary', null, `${hits.length} trechos usados${docsUsed.size ? ` · ${docsUsed.size} documentos` : ''}`));
     hits.forEach((h, n) => {
       const c = el('div', 'ask-cite');
       c.append(el('span', 'ask-cite-n', `[${n + 1}]`));
-      c.append(el('span', 'ask-cite-t', h.text.slice(0, 220) + (h.text.length > 220 ? '…' : '')));
+      if (h.doc) c.append(el('span', 'ask-cite-doc', h.doc));
+      c.append(el('span', 'ask-cite-t', h.text.slice(0, 200) + (h.text.length > 200 ? '…' : '')));
       cites.append(c);
     });
     turn.append(cites);

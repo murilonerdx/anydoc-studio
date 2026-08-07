@@ -402,9 +402,11 @@ button{font:inherit;color:inherit;cursor:pointer}
 .pane-ask.active{display:flex}
 .ask-head{display:flex;gap:9px;padding:14px 20px;border-bottom:1px solid var(--border-faint);
   background:var(--surface-2);flex:none}
+#ask-scope{flex:none;font:inherit;font-size:12.5px;padding:9px 10px;border-radius:10px;
+  border:1px solid var(--border-muted);background:var(--surface);color:var(--text)}
 #ask-input{flex:1;font:inherit;font-size:14px;padding:9px 12px;border-radius:10px;
   border:1px solid var(--border-muted);background:var(--surface);color:var(--text)}
-#ask-input:focus{outline:none;border-color:var(--heat)}
+#ask-input:focus,#ask-scope:focus{outline:none;border-color:var(--heat)}
 .ask-body{flex:1;overflow:auto;padding:18px 20px 60px;max-width:820px;margin:0 auto;width:100%;
   display:flex;flex-direction:column;gap:18px}
 .ask-empty{color:var(--text-muted);font-size:13.5px;text-align:center;padding:36px 20px;line-height:1.6}
@@ -422,6 +424,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ask-cite{display:flex;gap:8px;padding:6px 10px;margin:4px 0;border:1px solid var(--border-faint);
   border-radius:8px;background:var(--surface-2)}
 .ask-cite-n{flex:none;color:var(--heat);font-family:var(--mono);font-size:11px}
+.ask-cite-doc{flex:none;font-family:var(--mono);font-size:10px;color:var(--text-muted);
+  background:var(--alpha-8);border-radius:5px;padding:1px 6px;align-self:flex-start;max-width:40%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ask-cite-t{color:var(--text-muted);line-height:1.45}
 
 /* ===================== WORD BANK ===================== */

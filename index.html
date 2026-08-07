@@ -156,7 +156,11 @@
             <!-- Ask (in-browser RAG) -->
             <div class="pane pane-ask" data-pane="ask">
               <div class="ask-head">
-                <input type="text" id="ask-input" placeholder="Pergunte algo sobre este documento…" />
+                <select id="ask-scope" title="Onde procurar">
+                  <option value="this">Este documento</option>
+                  <option value="all">Todos os documentos</option>
+                </select>
+                <input type="text" id="ask-input" placeholder="Pergunte algo sobre o documento…" />
                 <button class="primary-btn sm" id="ask-go">Perguntar</button>
               </div>
               <div class="ask-body" id="ask-body">

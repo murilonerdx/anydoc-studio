@@ -59,20 +59,21 @@ export async function buildIndex(markdown, onProgress) {
   return out;
 }
 
-/** Retrieve the top-k most relevant chunks for a question. */
+/** Retrieve the top-k most relevant chunks for a question. Preserves each
+ *  chunk's source document name (`doc`) when present, for cross-doc citations. */
 export async function retrieve(question, index, k = 5) {
   const cfg = loadCfg();
   const q = await ollamaEmbed(question, cfg);
   return index
-    .map((c, i) => ({ i, text: c.text, score: cosine(q, c.vec) }))
+    .map((c, i) => ({ i, text: c.text, doc: c.doc, score: cosine(q, c.vec) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
 }
 
 function answerPrompt(question, passages) {
-  const context = passages.map((p, n) => `[${n + 1}] ${p.text}`).join('\n\n');
-  return `Você é um assistente que responde SOMENTE com base nos trechos do documento abaixo.
-Regras: responda na língua da pergunta; seja preciso e conciso; cite os trechos usados como [n]; se a resposta não estiver nos trechos, diga "Não encontrei isso no documento."
+  const context = passages.map((p, n) => `[${n + 1}]${p.doc ? ` (${p.doc})` : ''} ${p.text}`).join('\n\n');
+  return `Você é um assistente que responde SOMENTE com base nos trechos abaixo (podem vir de vários documentos).
+Regras: responda na língua da pergunta; seja preciso e conciso; cite os trechos usados como [n] e mencione o documento quando relevante; se a resposta não estiver nos trechos, diga "Não encontrei isso nos documentos."
 
 Trechos:
 ${context}
