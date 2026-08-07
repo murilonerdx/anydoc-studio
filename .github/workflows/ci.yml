@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax-check JavaScript modules
+        run: |
+          for f in app.js worker.js paddle.js translate.js bergamot.js scrape.js rag.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      - name: Syntax-check Python servers
+        run: |
+          python -m py_compile serve.py proxy.py
+
+      - name: Verify required assets exist
+        run: |
+          test -f vendor/anydoc/anydoc_wasm_bg.wasm
+          test -f vendor/pdf-inspector/pdf_inspector_wasm_bg.wasm
+          test -f vendor/tesseract/tesseract.esm.min.js
+          test -d vendor/tesseract/lang
+          test -f index.html && test -f styles.css
+          echo "All required assets present."
