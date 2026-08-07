@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs / scratch
+*.log
+tmp/
+scratch/
+
+# Node (only used by the setup/bundling scripts, never at runtime)
+node_modules/
+package-lock.json
