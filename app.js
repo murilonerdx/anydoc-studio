@@ -633,18 +633,25 @@ const ocrLangHint = ocrControls;
 //  These heavy libraries load lazily from CDN only when OCR is
 //  actually used, so the base app stays fully offline.
 // ============================================================
-const OCR_CDN = {
-  tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js',
-  pdfjs: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.mjs',
-  pdfWorker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs',
+// Everything OCR-related is vendored locally, so the app is 100% offline —
+// no CDN. Tesseract loads its worker, WASM core, and language data from
+// vendor/tesseract/; PDF.js from vendor/pdfjs/.
+const OCR_LOCAL = {
+  tesseract: './vendor/tesseract/tesseract.esm.min.js',
+  tessWorker: './vendor/tesseract/worker.min.js',
+  tessCore: './vendor/tesseract/core',   // directory; the engine picks the SIMD/LSTM build
+  tessLang: './vendor/tesseract/lang',   // directory of gzipped {lang}.traineddata.gz
+  pdfjs: './vendor/pdfjs/pdf.min.mjs',
+  pdfWorker: './vendor/pdfjs/pdf.worker.min.mjs',
 };
+// Resolve to absolute URLs so paths hold up inside Tesseract's own worker.
+const abs = (p) => new URL(p, import.meta.url).href;
+const TESS_OPTS = { workerPath: abs(OCR_LOCAL.tessWorker), corePath: abs(OCR_LOCAL.tessCore), langPath: abs(OCR_LOCAL.tessLang) };
 let tesseractMod = null, pdfjsMod = null, ocrBusy = false;
 
 async function loadTesseract() {
   if (!tesseractMod) {
-    const m = await import(OCR_CDN.tesseract);
-    // The ESM build exposes the API on the default export; older/named
-    // shapes put createWorker at the top level. Normalize both.
+    const m = await import(OCR_LOCAL.tesseract);
     const createWorker = m.createWorker || m.default?.createWorker;
     if (typeof createWorker !== 'function') throw new Error('Tesseract.js: createWorker indisponível');
     tesseractMod = { createWorker };
@@ -653,8 +660,8 @@ async function loadTesseract() {
 }
 async function loadPdfjs() {
   if (!pdfjsMod) {
-    pdfjsMod = await import(OCR_CDN.pdfjs);
-    pdfjsMod.GlobalWorkerOptions.workerSrc = OCR_CDN.pdfWorker;
+    pdfjsMod = await import(OCR_LOCAL.pdfjs);
+    pdfjsMod.GlobalWorkerOptions.workerSrc = abs(OCR_LOCAL.pdfWorker);
   }
   return pdfjsMod;
 }
@@ -708,6 +715,7 @@ async function runOcr(rec) {
       ov.status('Carregando modelo de OCR (uma vez, fica em cache)…');
       const { createWorker } = await loadTesseract();
       tess = await createWorker(rec.ocrLang || 'por+eng', 1, {
+        ...TESS_OPTS,
         logger: (m) => { if (m.status === 'recognizing text') ov.progress(m.progress); },
       });
     }
