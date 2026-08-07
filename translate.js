@@ -235,6 +235,13 @@ export async function translateText(text, cfg, signal, ctx = {}) {
   return llmComplete(prompt, cfg, signal);
 }
 
+/** Free-form completion for RAG answering — uses the LLM providers only
+ *  (Ollama / OpenAI-compatible); Libre/Bergamot fall back to Ollama. */
+export async function chat(prompt, cfg, signal) {
+  const c = (cfg.provider === 'ollama' || cfg.provider === 'openai') ? cfg : { ...cfg, provider: 'ollama' };
+  return llmComplete(prompt, c, signal);
+}
+
 /** Connectivity/health check per provider. */
 export async function testConnection(cfg) {
   if (cfg.provider === 'bergamot') {

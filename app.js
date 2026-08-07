@@ -12,6 +12,7 @@ import { marked } from './vendor/marked/marked.esm.js';
 import { paddleRecognize } from './paddle.js';
 import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS } from './translate.js';
 import { scrapeUrl, loadScrapeCfg, saveScrapeCfg } from './scrape.js';
+import { buildIndex, retrieve, answer as ragAnswer } from './rag.js';
 
 // ---- tiny helpers ----
 const $ = (id) => document.getElementById(id);
@@ -1756,6 +1757,67 @@ document.querySelectorAll('[data-file]').forEach((btn) => {
 const THEME_KEY = 'anydoc-studio-theme';
 const savedTheme = localStorage.getItem(THEME_KEY);
 if (savedTheme) document.body.dataset.theme = savedTheme;
+// ============================================================
+//  Ask (in-browser RAG over the active document)
+// ============================================================
+let asking = false;
+async function askDoc() {
+  if (asking) return;
+  const rec = docs.get(activeId);
+  const q = $('ask-input').value.trim();
+  const body = $('ask-body');
+  if (!rec || !q) return;
+  if (!rec.markdown || rec.markdown.length < 20) {
+    body.innerHTML = '<div class="ask-empty">Este documento não tem texto suficiente. Rode o OCR primeiro, se for um scan.</div>';
+    return;
+  }
+  asking = true;
+  $('ask-go').disabled = true;
+
+  // Question bubble + a status line we update in place.
+  const turn = el('div', 'ask-turn');
+  turn.append(el('div', 'ask-q', q));
+  const status = el('div', 'ask-status', 'Preparando…');
+  turn.append(status);
+  if (body.querySelector('.ask-empty')) body.innerHTML = '';
+  body.prepend(turn);
+  $('ask-input').value = '';
+
+  try {
+    if (!rec._ragIndex) {
+      status.textContent = 'Indexando o documento (uma vez)…';
+      rec._ragIndex = await buildIndex(rec.markdown, (i, n) => { status.textContent = `Indexando ${i}/${n}…`; });
+    }
+    status.textContent = 'Buscando trechos relevantes…';
+    const hits = await retrieve(q, rec._ragIndex, 5);
+    status.textContent = 'Gerando resposta…';
+    const text = await ragAnswer(q, hits, loadCfg());
+
+    status.remove();
+    const ans = el('div', 'ask-a');
+    ans.innerHTML = marked.parse(text || '_(sem resposta)_');
+    turn.append(ans);
+
+    const cites = el('details', 'ask-cites');
+    cites.append(el('summary', null, `${hits.length} trechos usados`));
+    hits.forEach((h, n) => {
+      const c = el('div', 'ask-cite');
+      c.append(el('span', 'ask-cite-n', `[${n + 1}]`));
+      c.append(el('span', 'ask-cite-t', h.text.slice(0, 220) + (h.text.length > 220 ? '…' : '')));
+      cites.append(c);
+    });
+    turn.append(cites);
+  } catch (e) {
+    status.textContent = 'Erro: ' + (e.message || e);
+    status.classList.add('err');
+  } finally {
+    asking = false;
+    $('ask-go').disabled = false;
+  }
+}
+$('ask-go').addEventListener('click', askDoc);
+$('ask-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') askDoc(); });
+
 // ============================================================
 //  Word bank (glossary) modal
 // ============================================================

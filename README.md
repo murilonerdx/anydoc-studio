@@ -30,6 +30,7 @@ The base application is **fully offline**. Heavy optional engines (OCR runtimes,
 | **OCR (local)** | Images and scanned PDFs, two selectable engines: **Tesseract.js** (light) and **PaddleOCR PP-OCRv5** (accurate, ONNX) |
 | **Positions** | Bounding-box overlay of every detected region + an **edit mode** to move, resize, delete, and edit boxes on the page |
 | **Translation** | **Layout-preserving**, real-time, in-document substitution. Batch translation with document-type context, a glossary, and automatic source-language detection (40+ languages) |
+| **Ask (RAG)** | Ask questions about a document and get grounded answers **with citations** — chunking + local embeddings (Ollama) + your chosen LLM, entirely in the browser |
 | **Scraping** | Paste a URL → clean Markdown ([Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown)); a small local proxy handles CORS-restricted sites |
 | **Word bank** | A translation memory of terms → translations, bucketed by language and document type, reused as context |
 | **Persistence** | Uploads, OCR results, and translations survive a refresh (IndexedDB) |

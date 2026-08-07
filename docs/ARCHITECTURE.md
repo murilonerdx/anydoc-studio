@@ -109,5 +109,6 @@ clicking again always works.
 | `translate.js` | Providers, batch translation, language detection, glossary |
 | `bergamot.js` | In-browser neural translation (Bergamot WASM) |
 | `scrape.js` | URL → Markdown (Readability + Turndown) |
+| `rag.js` | In-browser RAG: chunk, embed (Ollama), retrieve, answer with citations |
 | `serve.py` | Static server with no-cache headers for code |
 | `proxy.py` | Optional local CORS proxy for scraping |

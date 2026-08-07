@@ -124,6 +124,7 @@
             <button class="tab tab-positions" data-tab="positions" hidden>Posições <span class="tab-count" id="pos-count" hidden>0</span></button>
             <button class="tab tab-translate" data-tab="translate" hidden>Tradução</button>
             <button class="tab" data-tab="structure">Estrutura</button>
+            <button class="tab" data-tab="ask">Perguntar</button>
             <button class="tab" data-tab="assets">Recursos <span class="tab-count" id="assets-count" hidden>0</span></button>
           </nav>
 
@@ -151,6 +152,16 @@
             <div class="pane pane-translate" data-pane="translate">
               <div class="tr-toolbar" id="tr-toolbar"></div>
               <div class="tr-body" id="translate"></div>
+            </div>
+            <!-- Ask (in-browser RAG) -->
+            <div class="pane pane-ask" data-pane="ask">
+              <div class="ask-head">
+                <input type="text" id="ask-input" placeholder="Pergunte algo sobre este documento…" />
+                <button class="primary-btn sm" id="ask-go">Perguntar</button>
+              </div>
+              <div class="ask-body" id="ask-body">
+                <div class="ask-empty">Faça uma pergunta e a resposta virá com base no conteúdo do documento (RAG local, via Ollama).</div>
+              </div>
             </div>
             <!-- Structure -->
             <div class="pane pane-structure" data-pane="structure">
