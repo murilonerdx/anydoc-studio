@@ -45,3 +45,12 @@ export function paddleRecognize(image, onStatus) {
     w.postMessage({ type: 'recognize', id, image }, [image.data.buffer]);
   });
 }
+
+/** Hard-stop the PaddleOCR worker (used to cancel a running OCR). */
+export function terminatePaddle() {
+  if (!worker) return;
+  for (const [, p] of pending) p.reject(new Error('__cancelled__'));
+  pending.clear();
+  worker.terminate();
+  worker = null;
+}

@@ -57,7 +57,8 @@ self.onmessage = async (e) => {
     const boxes = results.map((r) => {
       const b = r.box || {};
       const points = b.points ? b.points.map((p) => [p.x, p.y]) : null;
-      return { text: r.text || '', x: b.x || 0, y: b.y || 0, w: b.width || 0, h: b.height || 0, points };
+      const conf = typeof r.confidence === 'number' ? r.confidence : null;
+      return { text: r.text || '', x: b.x || 0, y: b.y || 0, w: b.width || 0, h: b.height || 0, points, conf };
     });
     self.postMessage({ type: 'result', id, text, boxes });
   } catch (err) {

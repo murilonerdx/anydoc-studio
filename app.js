@@ -9,7 +9,7 @@
 // ============================================================
 
 import { marked } from './vendor/marked/marked.esm.js';
-import { paddleRecognize } from './paddle.js';
+import { paddleRecognize, terminatePaddle } from './paddle.js';
 import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS } from './translate.js';
 import { scrapeUrl, loadScrapeCfg, saveScrapeCfg } from './scrape.js';
 import { buildIndex, retrieve, answerStream as ragAnswerStream } from './rag.js';
@@ -714,11 +714,25 @@ function canvasToImageInput(canvas) {
 async function runOcr(rec) {
   if (ocrBusy) return;
   ocrBusy = true;
-  const ov = showOcrOverlay();
+  let tess = null;
+  let cancelled = false;
+  let cancelReject = null;
+  // A signal we can race long awaits against, so a cancel interrupts an
+  // in-flight recognize/render immediately (terminating a worker does not
+  // reject its pending promise; the between-page checkpoint alone is too slow).
+  const cancelSignal = new Promise((_, rej) => { cancelReject = rej; });
+  cancelSignal.catch(() => {});
+  const raceCancel = (p) => { p.catch(() => {}); return Promise.race([p, cancelSignal]); };
+  const cancel = () => {
+    cancelled = true;
+    cancelReject(new Error('__cancelled__'));
+    try { tess && tess.terminate(); } catch { /* already gone */ }
+    try { terminatePaddle(); } catch { /* already gone */ }
+  };
+  const ov = showOcrOverlay(cancel);
   const usePaddle = rec.ocrEngine === 'paddle';
   try {
     // Prepare the chosen engine.
-    let tess = null;
     if (usePaddle) {
       ov.status('Preparando PaddleOCR…');
     } else {
@@ -746,6 +760,7 @@ async function runOcr(rec) {
         .map((l) => ({
           text: l.text.trim(),
           x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0, points: null,
+          conf: typeof l.confidence === 'number' ? l.confidence / 100 : null,
         }));
       return { text: (data.text || '').trim(), boxes };
     };
@@ -754,8 +769,8 @@ async function runOcr(rec) {
     let markdown = '';
     if (rec.isImage) {
       ov.status('Reconhecendo texto da imagem…');
-      const canvas = await imageToCanvas(rec.bytes, rec.imageExt);
-      const { text, boxes } = await recognizeCanvas(canvas);
+      const canvas = await raceCancel(imageToCanvas(rec.bytes, rec.imageExt));
+      const { text, boxes } = await raceCancel(recognizeCanvas(canvas));
       markdown = text;
       // Cache the raster so Positions/Translation never re-render (fast, robust).
       ocrPages.push({ page: 1, width: canvas.width, height: canvas.height, scale: 1, boxes, raster: canvas.toDataURL('image/jpeg', 0.85) });
@@ -767,9 +782,10 @@ async function runOcr(rec) {
       for (let i = 1; i <= pdf.numPages; i++) {
         ov.status(`Renderizando e lendo página ${i} de ${pdf.numPages}…`);
         ov.progress((i - 1) / pdf.numPages);
+        if (cancelled) throw new Error('__cancelled__');
         const page = await pdf.getPage(i);
-        const canvas = await renderPdfPage(page, RENDER_SCALE);
-        const { text, boxes } = await recognizeCanvas(canvas);
+        const canvas = await raceCancel(renderPdfPage(page, RENDER_SCALE));
+        const { text, boxes } = await raceCancel(recognizeCanvas(canvas));
         if (text) pages.push(`<!-- Página ${i} -->\n\n${text}`);
         // Cache the raster so Positions/Translation never re-render the PDF.
         ocrPages.push({ page: i, width: canvas.width, height: canvas.height, scale: RENDER_SCALE, boxes, raster: canvas.toDataURL('image/jpeg', 0.82) });
@@ -789,13 +805,14 @@ async function runOcr(rec) {
     ov.done();
     if (activeId === rec.id) { renderActive(); selectTab('preview'); }
   } catch (err) {
-    ov.fail(err?.message || String(err));
+    if (cancelled || err?.message === '__cancelled__') ov.done();
+    else ov.fail(err?.message || String(err));
   } finally {
     ocrBusy = false;
   }
 }
 
-function showOcrOverlay() {
+function showOcrOverlay(onCancel) {
   let ov = document.getElementById('ocr-overlay');
   if (ov) ov.remove();
   ov = el('div', 'ocr-overlay');
@@ -808,6 +825,15 @@ function showOcrOverlay() {
   bar.append(fill);
   const sub = el('div', 'ocr-sub', 'Processamento local — nada é enviado.');
   card.append(spin, status, bar, sub);
+  if (onCancel) {
+    const cancelBtn = el('button', 'ghost-btn sm ocr-cancel', 'Cancelar');
+    cancelBtn.addEventListener('click', () => {
+      cancelBtn.disabled = true;
+      status.textContent = 'Cancelando…';
+      onCancel();
+    });
+    card.append(cancelBtn);
+  }
   ov.append(card);
   ($('doc-view').hidden ? document.querySelector('.workspace') : $('doc-view')).append(ov);
 
@@ -849,6 +875,21 @@ async function renderPositions(rec) {
   tb.append(chip('regiões', total), chip('páginas', rec.ocrPages.length),
     chip('motor', rec.ocrEngine === 'paddle' ? 'PaddleOCR' : 'Tesseract'));
 
+  // OCR confidence: color the boxes and let the user isolate low-confidence ones.
+  const hasConf = rec.ocrPages.some((p) => p.boxes.some((b) => b.conf != null));
+  const lowCount = rec.ocrPages.reduce((n, p) => n + p.boxes.filter((b) => b.conf != null && b.conf < 0.6).length, 0);
+  if (hasConf) {
+    const lc = chip('baixa confiança', lowCount);
+    if (lowCount) lc.classList.add('stat-warn');
+    tb.append(lc);
+    const onlyLow = el('button', 'ghost-btn sm', rec._onlyLow ? 'Ver todas' : 'Só baixa confiança');
+    onlyLow.classList.toggle('on', !!rec._onlyLow);
+    onlyLow.disabled = !lowCount;
+    onlyLow.addEventListener('click', () => { rec._onlyLow = !rec._onlyLow; renderPositions(rec); });
+    tb.append(onlyLow);
+  }
+  const confClass = (c) => (c == null ? '' : c < 0.6 ? 'conf-low' : c < 0.85 ? 'conf-mid' : 'conf-hi');
+
   // Edit mode: move / resize / delete boxes and edit their text on the page.
   const editToggle = el('button', 'ghost-btn sm', '✏️ Editar caixas');
   editToggle.style.marginLeft = 'auto';
@@ -873,6 +914,7 @@ async function renderPositions(rec) {
 
   body.classList.toggle('pos-editing', !!rec._editing);
   body.classList.toggle('show-labels', !!rec._showLabels || !!rec._editing);
+  body.classList.toggle('pos-only-low', !!rec._onlyLow);
 
   rec.ocrPages.forEach((pg, pi) => {
     body.append(el('div', 'pos-page-title', `Página ${pg.page} · ${pg.boxes.length} regiões`));
@@ -895,10 +937,12 @@ async function renderPositions(rec) {
     const list = el('div', 'pos-list');
 
     pg.boxes.forEach((b, idx) => {
+      const cc = confClass(b.conf);
       const shape = document.createElementNS(SVGNS, 'rect');
       shape.setAttribute('x', b.x); shape.setAttribute('y', b.y);
       shape.setAttribute('width', b.w); shape.setAttribute('height', b.h);
-      shape.setAttribute('class', 'pos-box');
+      shape.setAttribute('class', 'pos-box ' + cc);
+      if (b.conf != null) shape.setAttribute('data-conf', Math.round(b.conf * 100) + '%');
       svg.append(shape);
 
       const text = () => (rec.translations?.[pi]?.[idx]) || b.text;
@@ -917,9 +961,10 @@ async function renderPositions(rec) {
       }
       inner.append(eb);
 
-      const li = el('div', 'pos-list-item');
+      const li = el('div', 'pos-list-item ' + cc);
       li.append(el('span', 'pos-idx', String(idx + 1)));
       li.append(el('span', 'pos-li-text', text()));
+      if (b.conf != null) { const cf = el('span', 'pos-conf', Math.round(b.conf * 100) + '%'); li.append(cf); }
       const hi = () => { shape.classList.add('hot'); eb.classList.add('hot'); li.classList.add('hot'); };
       const lo = () => { shape.classList.remove('hot'); eb.classList.remove('hot'); li.classList.remove('hot'); };
       shape.addEventListener('mouseenter', hi); shape.addEventListener('mouseleave', lo);
