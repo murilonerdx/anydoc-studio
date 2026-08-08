@@ -17,7 +17,7 @@ jobs:
 
       - name: Syntax-check JavaScript modules
         run: |
-          for f in app.js worker.js paddle.js translate.js bergamot.js scrape.js rag.js; do
+          for f in app.js worker.js paddle.js paddle-worker.js translate.js bergamot.js scrape.js rag.js export.js; do
             echo "node --check $f"
             node --check "$f"
           done
