@@ -27,7 +27,7 @@ jobs:
 
       - name: Syntax-check Python servers
         run: |
-          python -m py_compile serve.py proxy.py
+          python -m py_compile server.py serve.py proxy.py
 
       - name: Verify required assets exist
         run: |

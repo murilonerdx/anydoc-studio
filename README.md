@@ -36,7 +36,8 @@ The base application is **fully offline**. Heavy optional engines (OCR runtimes,
 | **Word bank** | A translation memory of terms → translations, bucketed by language and document type, reused as context |
 | **Installable (PWA)** | Install it as an app; a service worker caches the shell and assets so it keeps working offline |
 | **Accessibility** | Region rows and text boxes are keyboard-operable and labelled for assistive tech; OCR and translation progress announce via ARIA live regions |
-| **Persistence** | Uploads, OCR results, and translations survive a refresh (IndexedDB) |
+| **Storage** | A local **SQLite database + file drive** (`server.py`) holds documents, OCR, translations, embeddings, the word bank and settings — on your machine, off the browser. Import files by upload or **URL** (fetched server-side, bypassing CORS); pluggable file-source connectors (Google Drive planned) |
+| **Persistence** | Everything survives a refresh, stored in the database — not the browser. An older browser-stored library migrates into the database automatically on first run |
 
 ### Translation engines
 
@@ -49,20 +50,20 @@ All engines keep a **local option** and never require a bundled key:
 
 ## Quick start
 
-**Requirements:** Python 3.11+ (only used as a static file server), a recent Chromium- or Firefox-based browser, and [Git LFS](https://git-lfs.com) (the PaddleOCR runtime binary is stored via LFS). WebAssembly must be served over HTTP — do not open the files via `file://`.
+**Requirements:** Python 3.11+ (runs the local backend — standard library only, no packages to install), a recent Chromium- or Firefox-based browser, and [Git LFS](https://git-lfs.com) (the PaddleOCR runtime binary is stored via LFS). WebAssembly must be served over HTTP — do not open the files via `file://`.
 
 ```bash
 git lfs install
 git clone <your-fork-url> anydoc-studio
 cd anydoc-studio
-python serve.py 8777
+python server.py 8777
 ```
 
-> Without Git LFS the app still runs and Tesseract OCR works fully; only the optional **PaddleOCR** engine needs the LFS-tracked binary. If you already cloned without LFS, run `git lfs pull`.
+Then open **http://127.0.0.1:8777**. `server.py` is a single self-hosted process that serves the app **and** a small REST API backed by a local **SQLite database + file drive** (`data/`), so your documents, OCR, translations, word bank and settings are stored on your machine — not in the browser. Everything stays local; nothing is uploaded to any third party.
 
-Then open **http://127.0.0.1:8777**.
-
-> `serve.py` sends `Cache-Control: no-cache` on HTML/JS/CSS (so updates are picked up on a normal refresh) and the correct `application/wasm` MIME type. Any static server works, but if you use another one during development, disable HTML/JS caching.
+> **Migrating from an older build?** The first time you open it against the backend, any documents and settings still in the browser (IndexedDB/localStorage) are copied into the database automatically, then the browser copy is cleared.
+>
+> `serve.py` (static-only, no database) still exists for a quick look, but without the backend the app runs for the session only and does not persist. Without Git LFS the app runs and Tesseract OCR works fully; only the optional **PaddleOCR** engine needs the LFS-tracked binary (`git lfs pull`).
 
 That is the entire required setup. OCR, scraping, and translation are optional and configured per-feature below.
 
