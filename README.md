@@ -49,13 +49,16 @@ All engines keep a **local option** and never require a bundled key:
 
 ## Quick start
 
-**Requirements:** Python 3.11+ (only used as a static file server) and a recent Chromium- or Firefox-based browser. WebAssembly must be served over HTTP — do not open the files via `file://`.
+**Requirements:** Python 3.11+ (only used as a static file server), a recent Chromium- or Firefox-based browser, and [Git LFS](https://git-lfs.com) (the PaddleOCR runtime binary is stored via LFS). WebAssembly must be served over HTTP — do not open the files via `file://`.
 
 ```bash
+git lfs install
 git clone <your-fork-url> anydoc-studio
 cd anydoc-studio
 python serve.py 8777
 ```
+
+> Without Git LFS the app still runs and Tesseract OCR works fully; only the optional **PaddleOCR** engine needs the LFS-tracked binary. If you already cloned without LFS, run `git lfs pull`.
 
 Then open **http://127.0.0.1:8777**.
 
