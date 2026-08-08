@@ -10,7 +10,7 @@
 //      through and are never cached.
 // ============================================================
 
-const CACHE = 'anydoc-studio-v1';
+const CACHE = 'anydoc-studio-v2';
 const CORE = [
   './', './index.html', './styles.css', './app.js', './worker.js',
   './paddle.js', './paddle-worker.js', './translate.js', './bergamot.js',
@@ -36,6 +36,10 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return; // never cache POSTs (translation, embeddings)
   const url = new URL(req.url);
+  // The backend API (documents, bytes, settings) is live database state —
+  // never cache it, always go to the network. Caching /api/docs once served
+  // a stale empty list forever.
+  if (url.origin === location.origin && url.pathname.startsWith('/api/')) return;
   const sameOrigin = url.origin === location.origin;
   const isModelCdn = MODEL_HOSTS.some((h) => url.host.endsWith(h));
   if (!sameOrigin && !isModelCdn) return; // Ollama / API / proxy pass through untouched

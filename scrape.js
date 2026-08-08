@@ -15,12 +15,16 @@ async function getLibs() {
   return libs;
 }
 
-const CFG_KEY = 'anydoc-studio-scrape';
-export function loadScrapeCfg() {
-  try { return { proxyUrl: '', ...JSON.parse(localStorage.getItem(CFG_KEY) || '{}') }; }
-  catch { return { proxyUrl: '' }; }
+// Scrape settings live in the backend DB now (see store.js); an in-memory
+// cache is hydrated at boot so these stay synchronous.
+export const CFG_KEY = 'anydoc-studio-scrape';
+let _scrapeCache = null;
+export function hydrateScrapeCfg(v) { _scrapeCache = { proxyUrl: '', ...(v || {}) }; }
+export function loadScrapeCfg() { return _scrapeCache ? { proxyUrl: '', ..._scrapeCache } : { proxyUrl: '' }; }
+export function saveScrapeCfg(cfg) {
+  _scrapeCache = { proxyUrl: '', ...cfg };
+  Promise.resolve().then(() => import('./store.js')).then((s) => s.putKV(CFG_KEY, _scrapeCache)).catch(() => {});
 }
-export function saveScrapeCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
 
 function normalizeUrl(input) {
   let u = (input || '').trim();

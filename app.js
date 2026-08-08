@@ -10,10 +10,11 @@
 
 import { marked } from './vendor/marked/marked.esm.js';
 import { paddleRecognize, terminatePaddle } from './paddle.js';
-import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS } from './translate.js';
-import { scrapeUrl, loadScrapeCfg, saveScrapeCfg } from './scrape.js';
+import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAULT_CFG, detectLang, loadGlossary, recordGlossary, listOllamaModels, loadGlossaryBank, saveGlossaryBank, TARGET_LANGS, hydrateCfg, hydrateGlossary, CFG_KEY as TR_CFG_KEY, GLOSS_KEY } from './translate.js';
+import { scrapeUrl, loadScrapeCfg, saveScrapeCfg, hydrateScrapeCfg, CFG_KEY as SCRAPE_CFG_KEY } from './scrape.js';
 import { buildIndex, retrieve, answerStream as ragAnswerStream } from './rag.js';
 import { exportTranslatedPDF } from './export.js';
+import { checkBackend, listDocs, getDoc, createDoc, updateDoc, deleteDoc, clearDocs, putBytes, getBytes, getKV, putKV } from './store.js';
 
 // ---- tiny helpers ----
 const $ = (id) => document.getElementById(id);
@@ -87,18 +88,40 @@ async function idbRun(mode, fn) {
   }
 }
 
-function saveDoc(rec) {
-  return idbRun('readwrite', (s) =>
-    s.put({ id: rec.id, ord: rec.ord, name: rec.name, size: rec.size, bytes: rec.bytes,
-      pdfOptions: rec.pdfOptions, ocrLang: rec.ocrLang, ocrEngine: rec.ocrEngine,
-      ocrMarkdown: rec.ocrMarkdown || null, ocrPages: rec.ocrPages || null,
-      translations: rec.translations || null, trTarget: rec.trTarget || null,
-      isWeb: rec.isWeb || false, sourceUrl: rec.sourceUrl || null, docType: rec.docType || null,
-      ragIndex: rec.ragIndex || null, ragFor: rec.ragFor || null })
-  );
+// Persistence now lives in the backend database + file drive (server.py),
+// not in the browser. saveDoc creates the row + uploads the bytes the first
+// time, then sends only the changed (derived) fields on later saves — all
+// serialized per document so a create always precedes its updates.
+let backendUp = false;
+function docFields(rec) {
+  return { id: rec.id, name: rec.name, ord: rec.ord, size: rec.size, format: rec.format,
+    isWeb: rec.isWeb || false, sourceUrl: rec.sourceUrl || null, docType: rec.docType || null,
+    ocrLang: rec.ocrLang, ocrEngine: rec.ocrEngine, trTarget: rec.trTarget || null,
+    pdfOptions: rec.pdfOptions, ocrMarkdown: rec.ocrMarkdown || null, ocrPages: rec.ocrPages || null,
+    translations: rec.translations || null, ragIndex: rec.ragIndex || null, ragFor: rec.ragFor || null };
 }
-function deleteStoredDoc(id) { return idbRun('readwrite', (s) => s.delete(id)); }
-function clearStoredDocs() { return idbRun('readwrite', (s) => s.clear()); }
+function docDerived(rec) {
+  return { name: rec.name, ord: rec.ord, docType: rec.docType || null, ocrLang: rec.ocrLang,
+    ocrEngine: rec.ocrEngine, trTarget: rec.trTarget || null, pdfOptions: rec.pdfOptions,
+    ocrMarkdown: rec.ocrMarkdown || null, ocrPages: rec.ocrPages || null,
+    translations: rec.translations || null, ragIndex: rec.ragIndex || null, ragFor: rec.ragFor || null };
+}
+function saveDoc(rec) {
+  if (!backendUp) return Promise.resolve(); // no backend: in-memory only this session
+  rec._chain = (rec._chain || Promise.resolve()).then(async () => {
+    if (!rec._persisted) {
+      rec._persisted = true;
+      await createDoc(docFields(rec));
+      if (rec.bytes && rec.bytes.length) await putBytes(rec.id, rec.bytes);
+    } else {
+      await updateDoc(rec.id, docDerived(rec));
+    }
+  }).catch(() => {});
+  return rec._chain;
+}
+function deleteStoredDoc(id) { return backendUp ? deleteDoc(id).catch(() => {}) : Promise.resolve(); }
+function clearStoredDocs() { return backendUp ? clearDocs().catch(() => {}) : Promise.resolve(); }
+function legacyClearDocs() { return idbRun('readwrite', (s) => s.clear()); }
 function allStoredDocs() {
   return idbRun('readonly', (s) => {
     const acc = [];
@@ -111,25 +134,93 @@ function allStoredDocs() {
 }
 
 async function restoreDocs() {
-  const stored = await allStoredDocs();
-  if (!stored || !stored.length) return;
-  stored.sort((a, b) => String(a.ord).localeCompare(String(b.ord), undefined, { numeric: true }));
+  if (!backendUp) return;
+  let list;
+  try { list = await listDocs(); } catch { return; }
+  if (!list || !list.length) return;
+  list.sort((a, b) => String(a.ord).localeCompare(String(b.ord), undefined, { numeric: true }));
   // Keep the id counter ahead of anything restored.
-  for (const d of stored) {
-    const n = parseInt(String(d.id).replace(/\D/g, ''), 10);
+  for (const m of list) {
+    const n = parseInt(String(m.id).replace(/\D/g, ''), 10);
     if (Number.isFinite(n) && n > seq) seq = n;
   }
   let first = null;
-  for (const d of stored) {
-    intake(d.name, d.bytes instanceof Uint8Array ? d.bytes : new Uint8Array(d.bytes), d.size,
-      { id: d.id, ord: d.ord, pdfOptions: d.pdfOptions, ocrLang: d.ocrLang, ocrEngine: d.ocrEngine, ocrMarkdown: d.ocrMarkdown, ocrPages: d.ocrPages,
-      translations: d.translations, trTarget: d.trTarget,
-      isWeb: d.isWeb, sourceUrl: d.sourceUrl, docType: d.docType,
-      ragIndex: d.ragIndex, ragFor: d.ragFor, fromStore: true });
-    if (!first) first = d.id;
+  for (const m of list) {
+    let full = m, bytes = new Uint8Array();
+    try { full = await getDoc(m.id); } catch { /* keep list metadata */ }
+    try { bytes = await getBytes(m.id); } catch { /* may have no bytes */ }
+    intake(full.name, bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), full.size,
+      { id: full.id, ord: full.ord, pdfOptions: full.pdfOptions, ocrLang: full.ocrLang, ocrEngine: full.ocrEngine,
+        ocrMarkdown: full.ocrMarkdown, ocrPages: full.ocrPages, translations: full.translations, trTarget: full.trTarget,
+        isWeb: full.isWeb, sourceUrl: full.sourceUrl, docType: full.docType, markdown: full.markdown,
+        ragIndex: full.ragIndex, ragFor: full.ragFor, fromStore: true });
+    if (!first) first = full.id;
   }
   if (first) setActive(first);
 }
+
+// ---- Boot the storage layer: detect the backend, hydrate settings, and
+// migrate anything still in the browser (IndexedDB/localStorage) once. ----
+const legacyLS = (key) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
+const safeKV = async (key) => { try { return await getKV(key); } catch { return null; } };
+function hydrateSettings(cfg, gloss, scrape) { hydrateCfg(cfg); hydrateGlossary(gloss); hydrateScrapeCfg(scrape); }
+
+async function migrateLegacyDocs() {
+  let existing = [];
+  try { existing = await listDocs(); } catch { return; }
+  if (existing.length) return; // backend already has documents — don't re-import
+  let legacy = [];
+  try { legacy = await allStoredDocs(); } catch { return; }
+  if (!legacy || !legacy.length) return;
+  let copied = 0;
+  for (const d of legacy) {
+    try {
+      await createDoc({ id: d.id, name: d.name, ord: d.ord, size: d.size, isWeb: d.isWeb,
+        sourceUrl: d.sourceUrl, docType: d.docType, ocrLang: d.ocrLang, ocrEngine: d.ocrEngine,
+        trTarget: d.trTarget, pdfOptions: d.pdfOptions, ocrMarkdown: d.ocrMarkdown, ocrPages: d.ocrPages,
+        translations: d.translations, ragIndex: d.ragIndex, ragFor: d.ragFor });
+      const bytes = d.bytes instanceof Uint8Array ? d.bytes : new Uint8Array(d.bytes || []);
+      if (bytes.length) await putBytes(d.id, bytes);
+      copied++;
+    } catch { /* skip this doc */ }
+  }
+  // Only free the browser's copy once every document made it across.
+  if (copied === legacy.length) { try { await legacyClearDocs(); } catch { /* ignore */ } }
+}
+
+async function bootStores() {
+  backendUp = await checkBackend();
+  if (!backendUp) {
+    // No backend: run this session from any legacy localStorage, no persistence.
+    hydrateSettings(legacyLS(TR_CFG_KEY), legacyLS(GLOSS_KEY), legacyLS(SCRAPE_CFG_KEY));
+    showBackendOffline();
+    return;
+  }
+  const [cfg, gloss, scrape, migrated] = await Promise.all([
+    safeKV(TR_CFG_KEY), safeKV(GLOSS_KEY), safeKV(SCRAPE_CFG_KEY), safeKV('_migrated')]);
+  const cfgV = cfg ?? legacyLS(TR_CFG_KEY);
+  const glossV = gloss ?? legacyLS(GLOSS_KEY);
+  const scrapeV = scrape ?? legacyLS(SCRAPE_CFG_KEY);
+  hydrateSettings(cfgV, glossV, scrapeV);
+  if (!migrated) {
+    if (cfg == null && cfgV) await putKV(TR_CFG_KEY, cfgV).catch(() => {});
+    if (gloss == null && glossV) await putKV(GLOSS_KEY, glossV).catch(() => {});
+    if (scrape == null && scrapeV) await putKV(SCRAPE_CFG_KEY, scrapeV).catch(() => {});
+    await migrateLegacyDocs();
+    await putKV('_migrated', { at: new Date().toISOString() }).catch(() => {});
+  }
+}
+
+function showBackendOffline() {
+  if (document.getElementById('backend-banner')) return;
+  const b = el('div', 'backend-banner');
+  b.id = 'backend-banner';
+  b.innerHTML = 'Banco de dados offline — rode <code>python server.py</code> para salvar seus documentos. ' +
+    'Esta sessão funciona, mas <strong>não será persistida</strong>.';
+  document.body.appendChild(b);
+}
+
+const storesReady = bootStores();
 
 // ============================================================
 //  Worker bridge (advanced main ⇄ worker messaging)
@@ -149,13 +240,16 @@ worker.addEventListener('message', (e) => {
       ? `anydoc + pdf-inspector ${msg.pdfInspector}`
       : 'motores prontos · local';
     $('dz-title').textContent = 'Solte documentos aqui';
-    // Restore previously uploaded documents, then process anything dropped
-    // while the engines were still loading.
-    restoreDocs();
-    if (queuedWhileLoading.length) {
-      const waiting = queuedWhileLoading.splice(0);
-      waiting.forEach((f) => intake(f.name, f.bytes, f.size));
-    }
+    // Once the storage layer is up (backend detected + settings hydrated +
+    // any one-time migration done), restore saved documents and then process
+    // anything dropped while the engines were still loading.
+    storesReady.then(() => {
+      restoreDocs();
+      if (queuedWhileLoading.length) {
+        const waiting = queuedWhileLoading.splice(0);
+        waiting.forEach((f) => intake(f.name, f.bytes, f.size));
+      }
+    });
     return;
   }
   if (msg.type === 'fatal') {
@@ -236,7 +330,7 @@ function intake(name, bytes, size, opts = {}) {
     id, name, base, bytes, size: size ?? bytes.length, format, isImage, imageExt: ext,
     isWeb, sourceUrl: opts.sourceUrl || null, docType: opts.docType || null,
     ragIndex: opts.ragIndex || null, ragFor: opts.ragFor || null,
-    status: 'pending', assetUrls: [],
+    status: 'pending', assetUrls: [], _persisted: !!opts.fromStore,
     ord: opts.ord ?? id,
     pdfOptions: opts.pdfOptions || { profile: 'fidelity', pageMarkers: false },
     ocrLang: opts.ocrLang || 'por+eng',

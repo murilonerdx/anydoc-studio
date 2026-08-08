@@ -287,6 +287,13 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ocr-card.fail .ocr-sub{color:var(--error)}
 .ocr-cancel{margin-top:14px}
 .ocr-cancel:disabled{opacity:.5;cursor:default}
+
+/* Backend-offline banner (no database reachable → session-only, no persistence). */
+.backend-banner{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;
+  max-width:min(680px,92vw);padding:10px 16px;border-radius:10px;font-size:13px;line-height:1.5;
+  background:#3a2a12;color:#ffd9a8;border:1px solid rgba(232,163,61,.5);
+  box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.backend-banner code{font-family:var(--mono);background:rgba(0,0,0,.25);padding:1px 5px;border-radius:4px}
 .ocr-card .ghost-btn{margin-top:14px}
 .ocr-lang{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;font-size:12.5px;color:var(--text-muted)}
 .ocr-lang-select{font:inherit;font-size:12.5px;padding:4px 8px;border-radius:7px;border:1px solid var(--border-muted);

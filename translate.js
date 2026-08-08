@@ -11,6 +11,7 @@
 
 import { franc } from './vendor/franc/franc.js';
 import { bergamotTranslate, bergamotReady } from './bergamot.js';
+import { putKV } from './store.js';
 
 export const DEFAULT_CFG = {
   provider: 'ollama',
@@ -26,8 +27,18 @@ export const DEFAULT_CFG = {
   answerModel: '', // dedicated LLM for the Ask/RAG panel; falls back to ollamaModel
 };
 
-const CFG_KEY = 'anydoc-studio-translate';
-const GLOSS_KEY = 'anydoc-studio-glossary';
+export const CFG_KEY = 'anydoc-studio-translate';
+export const GLOSS_KEY = 'anydoc-studio-glossary';
+
+// Settings and the word bank live in the backend database now (not
+// localStorage). We keep an in-memory cache so the many synchronous callers
+// keep working; the app hydrates it from the DB at boot and every save is
+// pushed back to the DB (fire-and-forget; harmless if the backend is down).
+let _cfgCache = null;
+let _glossCache = null;
+export function hydrateCfg(v) { _cfgCache = { ...DEFAULT_CFG, ...(v || {}) }; }
+export function hydrateGlossary(v) { _glossCache = (v && typeof v === 'object') ? v : {}; }
+function persist(key, value) { Promise.resolve().then(() => putKV(key, value)).catch(() => {}); }
 
 // ISO 639-3 (franc) → human name and ISO 639-1 (for Libre/Bergamot).
 const ISO3 = {
@@ -99,33 +110,21 @@ export const RECOMMENDED_LOCAL = [
   { name: 'llama3.1:8b', note: 'equilibrado, bom em instruções' },
 ];
 
-export function loadCfg() {
-  try { return { ...DEFAULT_CFG, ...JSON.parse(localStorage.getItem(CFG_KEY) || '{}') }; }
-  catch { return { ...DEFAULT_CFG }; }
-}
-export function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+export function loadCfg() { return _cfgCache ? { ...DEFAULT_CFG, ..._cfgCache } : { ...DEFAULT_CFG }; }
+export function saveCfg(cfg) { _cfgCache = { ...DEFAULT_CFG, ...cfg }; persist(CFG_KEY, _cfgCache); }
 
 // ---- Glossary (term → translation, per target language) ----
-export function loadGlossaryBank() {
-  try { return JSON.parse(localStorage.getItem(GLOSS_KEY) || '{}'); } catch { return {}; }
-}
-export function saveGlossaryBank(bank) { localStorage.setItem(GLOSS_KEY, JSON.stringify(bank || {})); }
-export function loadGlossary(targetName) {
-  try {
-    const bank = JSON.parse(localStorage.getItem(GLOSS_KEY) || '{}');
-    return bank[deaccent(targetName)] || {};
-  } catch { return {}; }
-}
+export function loadGlossaryBank() { return _glossCache || {}; }
+export function saveGlossaryBank(bank) { _glossCache = bank || {}; persist(GLOSS_KEY, _glossCache); }
+export function loadGlossary(targetName) { return (_glossCache || {})[deaccent(targetName)] || {}; }
 export function recordGlossary(orig, translated, targetName, docType) {
   const short = (orig || '').trim();
   if (!short || short.length > 40 || (short.match(/\S+/g) || []).length > 4) return;
-  try {
-    const bank = JSON.parse(localStorage.getItem(GLOSS_KEY) || '{}');
-    const lang = deaccent(targetName);
-    bank[lang] = bank[lang] || {};
-    bank[lang][short] = { t: translated, type: docType || 'geral' };
-    localStorage.setItem(GLOSS_KEY, JSON.stringify(bank));
-  } catch { /* storage optional */ }
+  const bank = _glossCache || (_glossCache = {});
+  const lang = deaccent(targetName);
+  bank[lang] = bank[lang] || {};
+  bank[lang][short] = { t: translated, type: docType || 'geral' };
+  persist(GLOSS_KEY, bank);
 }
 
 // ============================================================
