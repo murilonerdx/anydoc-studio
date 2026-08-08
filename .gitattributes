@@ -1,6 +1,5 @@
 # Normalize text files to LF; never touch binaries.
 * text=auto eol=lf
-
 # Binary assets — no EOL conversion, no textual diff.
 *.wasm         binary
 *.onnx         binary
@@ -15,3 +14,4 @@
 *.pdf          binary
 *.docx         binary
 *.map          binary
+vendor/onnxruntime-web/*.wasm filter=lfs diff=lfs merge=lfs -text

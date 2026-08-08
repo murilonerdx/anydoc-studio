@@ -15,3 +15,4 @@ scratch/
 # Node (only used by the setup/bundling scripts, never at runtime)
 node_modules/
 package-lock.json
+__pycache__/

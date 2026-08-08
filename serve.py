@@ -16,6 +16,16 @@ LONG_CACHE = ('.wasm', '.onnx', '.woff2', '.woff', '.ttf', '.svg', '.png', '.jpg
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Guarantee correct MIME regardless of the host's mimetypes registry:
+    # ES modules require a JS type, and ONNX Runtime streams the .wasm (needs
+    # application/wasm to compile).
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        '.js': 'text/javascript',
+        '.mjs': 'text/javascript',
+        '.wasm': 'application/wasm',
+    }
+
     def end_headers(self):
         path = self.path.split('?', 1)[0].lower()
         if path.endswith(NO_CACHE) or path.endswith('/'):

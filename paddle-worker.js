@@ -8,7 +8,10 @@
 //    ← { type:'result', id, text, boxes } | { type:'error', id, error }
 // ============================================================
 
-const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.mjs';
+// ONNX Runtime Web is vendored locally (WASM/CPU build) so PaddleOCR runs
+// fully offline — no CDN fetch on first use. See vendor/onnxruntime-web/.
+const ORT_URL = new URL('./vendor/onnxruntime-web/ort.wasm.min.mjs', import.meta.url).href;
+const ORT_WASM_DIR = new URL('./vendor/onnxruntime-web/', import.meta.url).href;
 const MODELS = {
   preset: 'PP-OCRv5_mobile',
   det: 'models/ppocrv5_mobile/PP-OCRv5_mobile_det_infer.onnx',
@@ -20,11 +23,12 @@ let servicePromise = null;
 
 function getService(status) {
   if (!servicePromise) servicePromise = (async () => {
-    status('Carregando ONNX Runtime…');
-    const ort = await import(ORT_CDN);
+    status('Carregando ONNX Runtime (local)…');
+    const ort = await import(ORT_URL);
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.simd = true;
-    status('Baixando modelos PaddleOCR (uma vez, fica em cache)…');
+    ort.env.wasm.wasmPaths = ORT_WASM_DIR; // load the glue + .wasm from the vendored dir
+    status('Carregando modelos PaddleOCR (uma vez, fica em cache)…');
     const [mod, detBuf, recBuf, dictText] = await Promise.all([
       import('./vendor/paddleocr-js/paddleocr.mjs'),
       fetch(MODELS.det).then((r) => r.arrayBuffer()),
