@@ -1317,38 +1317,60 @@ async function translateDoc(rec, target, prog, runBtn) {
   const ctx = { glossary, sourceName: src.name, sourceIso1: src.iso1 || undefined, docType };
 
   const BATCH = cfg.provider === 'libre' ? 25 : 12; // libre handles arrays well; LLMs stay reliable smaller
-  const markCard = (pi, bi, cls) => document.getElementById(`tr-card-${pi}-${bi}`)?.classList[cls ? 'add' : 'remove']('working');
-  const setSeg = (pi, bi, text) => {
-    const tgt = document.getElementById(`tr-lbl-${pi}-${bi}`);
-    const card = document.getElementById(`tr-card-${pi}-${bi}`);
-    const ov = document.getElementById(`tr-ov-${pi}-${bi}`);
-    if (tgt) tgt.textContent = text;
-    if (ov) ov.textContent = text; // live substitution on the document
-    card?.classList.remove('working');
-    card?.classList.add('done');
+  const q = (id) => document.getElementById(id);
+  // Mark a region as "being translated" on both the card and the document
+  // itself — the SVG box marches (overlay off) or the in-place text shimmers
+  // (overlay on), so you can watch the page fill in region by region.
+  const markWork = (pi, bi, on) => {
+    q(`tr-card-${pi}-${bi}`)?.classList[on ? 'add' : 'remove']('working');
+    q(`tr-ov-${pi}-${bi}`)?.parentElement?.classList[on ? 'add' : 'remove']('working');
+    q(`tr-box-${pi}-${bi}`)?.classList[on ? 'add' : 'remove']('working');
   };
+  const setSeg = (pi, bi, text) => {
+    const tgt = q(`tr-lbl-${pi}-${bi}`);
+    const card = q(`tr-card-${pi}-${bi}`);
+    const et = q(`tr-ov-${pi}-${bi}`);
+    const eb = et?.parentElement;
+    if (tgt) tgt.textContent = text;
+    if (et) et.textContent = text; // live substitution on the document
+    q(`tr-box-${pi}-${bi}`)?.classList.remove('working');
+    if (card) { card.classList.remove('working'); card.classList.add('done'); }
+    if (eb) {
+      eb.classList.remove('working');
+      eb.classList.add('just'); // brief "landed" flash
+      setTimeout(() => eb.classList.remove('just'), 500);
+    }
+  };
+  const clearWork = () => document.querySelectorAll('.seg-card.working,.tr-box.working,.pos-ebox.working')
+    .forEach((n) => n.classList.remove('working'));
 
   try {
     for (let i = 0; i < jobs.length; i += BATCH) {
       if (trAbort.signal.aborted) break;
       const slice = jobs.slice(i, i + BATCH);
-      slice.forEach((j) => markCard(j.pi, j.bi, true));
+      slice.forEach((j) => markWork(j.pi, j.bi, true));
       prog.textContent = `Traduzindo ${done + 1}–${Math.min(done + slice.length, total)} de ${total}…`;
       const outs = await translateBatch(slice.map((j) => j.text), cfg, trAbort.signal, ctx);
-      slice.forEach((j, k) => {
+      // Reveal the batch's results one at a time so the document visibly
+      // streams in, region by region, instead of a whole page snapping at once.
+      for (let k = 0; k < slice.length; k++) {
+        if (trAbort.signal.aborted) break;
+        const j = slice[k];
         const out = (outs[k] || '').trim();
         rec.translations[j.pi][j.bi] = out;
         recordGlossary(j.text, out, target, docType);
         setSeg(j.pi, j.bi, out || j.text);
-      });
-      done += slice.length;
+        done += 1;
+        prog.textContent = `Traduzindo ${done} de ${total}…`;
+        if (k < slice.length - 1) await new Promise((r) => setTimeout(r, 40));
+      }
       saveDoc(rec); // checkpoint each batch so progress survives interruptions
     }
     if (!trAbort?.signal.aborted) prog.textContent = `Concluído · ${done}/${total} · ${src.name} → ${target}`;
   } catch (err) {
     if (!trAbort?.signal.aborted) prog.textContent = `Erro: ${err.message}`;
-    document.querySelectorAll('.seg-card.working').forEach((c) => c.classList.remove('working'));
   }
+  clearWork();
 
   trAbort = null;
   runBtn.textContent = '⚡ Traduzir documento';
