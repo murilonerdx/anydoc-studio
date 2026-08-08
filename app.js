@@ -817,9 +817,13 @@ function showOcrOverlay(onCancel) {
   if (ov) ov.remove();
   ov = el('div', 'ocr-overlay');
   ov.id = 'ocr-overlay';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-label', 'Progresso do OCR');
   const card = el('div', 'ocr-card');
   const spin = el('div', 'ocr-spin');
   const status = el('div', 'ocr-status', 'Iniciando OCR…');
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
   const bar = el('div', 'ocr-bar');
   const fill = el('div', 'ocr-fill');
   bar.append(fill);
@@ -943,6 +947,7 @@ async function renderPositions(rec) {
       shape.setAttribute('width', b.w); shape.setAttribute('height', b.h);
       shape.setAttribute('class', 'pos-box ' + cc);
       if (b.conf != null) shape.setAttribute('data-conf', Math.round(b.conf * 100) + '%');
+      shape.setAttribute('aria-hidden', 'true'); // decorative; the list conveys the same info to AT
       svg.append(shape);
 
       const text = () => (rec.translations?.[pi]?.[idx]) || b.text;
@@ -962,6 +967,10 @@ async function renderPositions(rec) {
       inner.append(eb);
 
       const li = el('div', 'pos-list-item ' + cc);
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      const confTxt = b.conf != null ? `, confiança ${Math.round(b.conf * 100)}%` : '';
+      li.setAttribute('aria-label', `Região ${idx + 1}: ${text() || '(sem texto)'}${confTxt}`);
       li.append(el('span', 'pos-idx', String(idx + 1)));
       li.append(el('span', 'pos-li-text', text()));
       if (b.conf != null) { const cf = el('span', 'pos-conf', Math.round(b.conf * 100) + '%'); li.append(cf); }
@@ -970,6 +979,10 @@ async function renderPositions(rec) {
       shape.addEventListener('mouseenter', hi); shape.addEventListener('mouseleave', lo);
       eb.addEventListener('mouseenter', hi); eb.addEventListener('mouseleave', lo);
       li.addEventListener('mouseenter', hi); li.addEventListener('mouseleave', lo);
+      li.addEventListener('focus', hi); li.addEventListener('blur', lo);
+      li.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && rec._editing) { e.preventDefault(); eb.focus(); }
+      });
       list.append(li);
     });
 
@@ -1041,6 +1054,27 @@ function wireEbox(eb, et, del, rez, b, pg, inner, rec, pi, idx, onTextChange) {
     if (rec.translations?.[pi]?.[idx] != null && rec.translations[pi][idx] !== '') rec.translations[pi][idx] = v; else b.text = v;
     saveDoc(rec);
     onTextChange && onTextChange(v);
+  });
+
+  // Keyboard control (accessibility): focus a box and nudge / resize / edit /
+  // delete it — a full alternative to mouse drag for the same operations.
+  eb.setAttribute('tabindex', '0');
+  eb.setAttribute('role', 'button');
+  eb.setAttribute('aria-label',
+    `Caixa de texto: ${et.textContent.trim() || '(vazia)'}. Setas movem, Shift+setas redimensionam, Enter edita, Delete exclui.`);
+  const step = Math.max(1, Math.round(pg.width * 0.006));
+  const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  eb.addEventListener('keydown', (e) => {
+    if (et.isContentEditable) return; // editing text: let the caret handle keys
+    if (e.key === 'Enter') { e.preventDefault(); et.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); return; }
+    if (e.key === 'Delete') { e.preventDefault(); del.click(); return; }
+    const d = ARROWS[e.key];
+    if (!d) return;
+    e.preventDefault();
+    if (e.shiftKey) { b.w = Math.max(10, b.w + d[0] * step); b.h = Math.max(8, b.h + d[1] * step); }
+    else { b.x = Math.max(0, b.x + d[0] * step); b.y = Math.max(0, b.y + d[1] * step); }
+    placeEbox(eb, b, pg);
+    saveDoc(rec);
   });
 }
 
@@ -1153,6 +1187,8 @@ async function renderTranslation(rec) {
 
   const prog = el('span', 'tr-prog');
   prog.style.marginLeft = 'auto';
+  prog.setAttribute('role', 'status');
+  prog.setAttribute('aria-live', 'polite');
   tb.append(prog);
 
   const hasTr = rec.translations.some((pg) => pg.some(Boolean));
@@ -1222,6 +1258,7 @@ async function renderTranslation(rec) {
       box.setAttribute('width', b.w); box.setAttribute('height', b.h);
       box.setAttribute('class', 'tr-box');
       box.id = `tr-box-${pi}-${bi}`;
+      box.setAttribute('aria-hidden', 'true'); // decorative; the segment card is the AT-facing control
       svg.append(box);
 
       // Overlay box on the document: shows the translation in place, editable /
@@ -1260,11 +1297,14 @@ async function renderTranslation(rec) {
       tgt.contentEditable = 'true';
       tgt.spellcheck = false;
       tgt.dataset.placeholder = 'tradução…';
+      tgt.setAttribute('role', 'textbox');
+      tgt.setAttribute('aria-label', `Tradução da região ${bi + 1}: ${b.text}`);
       const done = rec.translations[pi][bi];
       if (done) { tgt.textContent = done; card.classList.add('done'); }
-      tgt.addEventListener('focus', () => card.classList.add('editing'));
+      tgt.addEventListener('focus', () => { card.classList.add('editing'); box.classList.add('on'); });
       tgt.addEventListener('blur', () => {
         card.classList.remove('editing');
+        box.classList.remove('on');
         rec.translations[pi][bi] = tgt.textContent.trim();
         card.classList.toggle('done', !!tgt.textContent.trim());
         const ov = document.getElementById(`tr-ov-${pi}-${bi}`);
