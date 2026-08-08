@@ -29,6 +29,9 @@
         <span class="badge-live" id="engine-status" title="Motor de conversão">
           <span class="dot"></span><span id="engine-label">carregando motor…</span>
         </span>
+        <button class="icon-btn" id="sources-btn" title="Fontes de arquivo / drive" aria-label="Fontes de arquivo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>
         <button class="icon-btn" id="storage-btn" title="Armazenamento" aria-label="Armazenamento">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
         </button>
@@ -322,6 +325,26 @@
       </div>
     </div>
 
+    <!-- ===================== SOURCES / DRIVE MODAL ===================== -->
+    <div class="modal-backdrop" id="sources-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sources-title">
+        <div class="modal-head">
+          <h2 id="sources-title">Fontes de arquivo</h2>
+          <button class="icon-btn" id="sources-close" aria-label="Fechar">✕</button>
+        </div>
+        <p class="modal-sub">
+          Traga arquivos para o seu <strong>drive local</strong>. Tudo é baixado e salvo no banco de
+          dados na sua máquina — nada é enviado a terceiros.
+        </p>
+        <div class="src-import">
+          <input id="src-url" type="url" placeholder="https://exemplo.com/documento.pdf" />
+          <button class="primary-btn sm" id="src-url-go">Importar de URL</button>
+        </div>
+        <div class="src-status" id="src-status" role="status" aria-live="polite"></div>
+        <div class="src-list" id="src-list"></div>
+      </div>
+    </div>
+
     <!-- ===================== STORAGE MODAL ===================== -->
     <div class="modal-backdrop" id="storage-modal" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="storage-title">
@@ -330,7 +353,8 @@
           <button class="icon-btn" id="storage-close" aria-label="Fechar">✕</button>
         </div>
         <p class="modal-sub">
-          Tudo é guardado localmente no seu navegador (IndexedDB). Imagens de página e embeddings
+          Tudo é guardado no <strong>banco de dados local</strong> (SQLite + drive de arquivos, via
+          <code>server.py</code>) — na sua máquina, fora do navegador. Imagens de página e embeddings
           são <strong>dados derivados</strong> — dá para limpá-los para liberar espaço; eles são
           recriados sob demanda, sem perder o documento original nem as traduções.
         </p>

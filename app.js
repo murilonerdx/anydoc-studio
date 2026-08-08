@@ -14,7 +14,7 @@ import { loadCfg, saveCfg, translateText, translateBatch, testConnection, DEFAUL
 import { scrapeUrl, loadScrapeCfg, saveScrapeCfg, hydrateScrapeCfg, CFG_KEY as SCRAPE_CFG_KEY } from './scrape.js';
 import { buildIndex, retrieve, answerStream as ragAnswerStream } from './rag.js';
 import { exportTranslatedPDF } from './export.js';
-import { checkBackend, listDocs, getDoc, createDoc, updateDoc, deleteDoc, clearDocs, putBytes, getBytes, getKV, putKV } from './store.js';
+import { checkBackend, listDocs, getDoc, createDoc, updateDoc, deleteDoc, clearDocs, putBytes, getBytes, getKV, putKV, getSources, importUrl } from './store.js';
 
 // ---- tiny helpers ----
 const $ = (id) => document.getElementById(id);
@@ -2224,6 +2224,62 @@ $('gloss-import-file').addEventListener('change', async (e) => {
     alert('Não foi possível importar: ' + (err.message || err));
   }
 });
+
+// ============================================================
+//  Sources / drive modal — bring files into the local drive.
+//  Upload is the dropzone; URL import is fetched server-side (bypasses
+//  CORS). Google Drive and other connectors are listed here and wired
+//  in a later step (they need your own OAuth client id).
+// ============================================================
+async function renderSources() {
+  const list = $('src-list');
+  list.innerHTML = '<div class="src-empty">Carregando fontes…</div>';
+  let sources = [];
+  try { sources = await getSources(); }
+  catch { list.innerHTML = '<div class="src-empty">Backend indisponível — rode <code>server.py</code>.</div>'; return; }
+  list.innerHTML = '';
+  const label = { upload: 'Arquivos do seu computador (arraste ou clique para enviar)',
+    url: 'Baixar de um endereço http/https direto para o drive',
+    gdrive: 'Vincular sua conta para buscar arquivos (requer um OAuth Client ID seu)' };
+  for (const s of sources) {
+    const row = el('div', 'src-row' + (s.ready ? '' : ' disabled'));
+    const main = el('div', 'src-main');
+    main.append(el('span', 'src-name', s.name));
+    main.append(el('span', 'src-desc', label[s.id] || ''));
+    row.append(main);
+    row.append(el('span', 'src-tag ' + (s.ready ? 'ok' : 'soon'),
+      s.ready ? 'disponível' : (s.needs === 'oauth-client-id' ? 'requer configuração' : 'em breve')));
+    list.append(row);
+  }
+}
+async function importFromUrl() {
+  const input = $('src-url');
+  const url = input.value.trim();
+  const status = $('src-status');
+  if (!url) return;
+  if (!backendUp) { status.textContent = 'Backend offline — rode server.py para importar.'; return; }
+  $('src-url-go').disabled = true;
+  status.textContent = 'Baixando…';
+  try {
+    const meta = await importUrl(url);
+    const full = await getDoc(meta.id);
+    let bytes = new Uint8Array();
+    try { bytes = await getBytes(meta.id); } catch { /* keep empty */ }
+    intake(full.name, bytes, full.size, { id: full.id, ord: full.ord, sourceUrl: full.sourceUrl, fromStore: true });
+    status.textContent = `Importado: ${full.name} (${fmtBytes(full.size || bytes.length)})`;
+    input.value = '';
+    setTimeout(() => { $('sources-modal').hidden = true; }, 900);
+  } catch (e) {
+    status.textContent = 'Erro: ' + (e.message || e);
+  } finally {
+    $('src-url-go').disabled = false;
+  }
+}
+$('sources-btn').addEventListener('click', () => { $('src-status').textContent = ''; $('src-url').value = ''; renderSources(); $('sources-modal').hidden = false; });
+$('sources-close').addEventListener('click', () => { $('sources-modal').hidden = true; });
+$('sources-modal').addEventListener('click', (e) => { if (e.target.id === 'sources-modal') $('sources-modal').hidden = true; });
+$('src-url-go').addEventListener('click', importFromUrl);
+$('src-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') importFromUrl(); });
 
 $('theme-toggle').addEventListener('click', () => {
   const cur = document.body.dataset.theme;
