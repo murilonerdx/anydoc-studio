@@ -1983,6 +1983,11 @@ async function askDoc() {
 }
 $('ask-go').addEventListener('click', askDoc);
 $('ask-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') askDoc(); });
+const ASK_EMPTY = 'Faça uma pergunta e a resposta virá com base no conteúdo do documento (RAG local, via Ollama).';
+$('ask-clear').addEventListener('click', () => {
+  if (asking) return; // don't wipe a turn mid-stream
+  $('ask-body').innerHTML = `<div class="ask-empty">${ASK_EMPTY}</div>`;
+});
 
 // ============================================================
 //  Storage manager modal
@@ -2080,6 +2085,50 @@ $('gloss-export').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(loadGlossaryBank(), null, 2)], { type: 'application/json' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: 'banco-de-palavras.json' });
   a.click(); URL.revokeObjectURL(url);
+});
+
+// Import a glossary JSON and merge it into the bank. Accepts the exported
+// shape { idioma: { termo: { t, type } } } and is lenient about variants:
+// a bare string translation, a `translation` field, or accented language
+// names (normalized to match how terms are stored).
+const glossDeaccent = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function mergeGlossaryBank(base, incoming) {
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+    throw new Error('formato esperado: { idioma: { termo: tradução } }');
+  }
+  const out = { ...base };
+  let added = 0;
+  for (const [lang, terms] of Object.entries(incoming)) {
+    if (!terms || typeof terms !== 'object') continue;
+    const key = glossDeaccent(lang);
+    out[key] = { ...(out[key] || {}) };
+    for (const [term, val] of Object.entries(terms)) {
+      const t = (val && typeof val === 'object') ? String(val.t ?? val.translation ?? '') : String(val ?? '');
+      if (!term.trim() || !t.trim()) continue;
+      const type = (val && typeof val === 'object' && val.type) ? val.type : 'geral';
+      out[key][term.trim()] = { t: t.trim(), type };
+      added++;
+    }
+  }
+  return { bank: out, added };
+}
+$('gloss-import').addEventListener('click', () => $('gloss-import-file').click());
+$('gloss-import-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const { bank, added } = mergeGlossaryBank(loadGlossaryBank(), data);
+    saveGlossaryBank(bank);
+    renderGlossary($('gloss-search').value);
+    const info = $('gloss-import');
+    const orig = info.textContent;
+    info.textContent = `Importados ${added} ✓`;
+    setTimeout(() => { info.textContent = orig; }, 2200);
+  } catch (err) {
+    alert('Não foi possível importar: ' + (err.message || err));
+  }
 });
 
 $('theme-toggle').addEventListener('click', () => {

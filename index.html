@@ -168,6 +168,7 @@
                 </select>
                 <input type="text" id="ask-input" placeholder="Pergunte algo sobre o documento…" />
                 <button class="primary-btn sm" id="ask-go">Perguntar</button>
+                <button class="ghost-btn sm" id="ask-clear" title="Limpar a conversa">Limpar chat</button>
               </div>
               <div class="ask-body" id="ask-body">
                 <div class="ask-empty">Faça uma pergunta e a resposta virá com base no conteúdo do documento (RAG local, via Ollama).</div>
@@ -312,6 +313,8 @@
         <div class="gloss-toolbar">
           <input id="gloss-search" type="text" placeholder="Filtrar termos…" />
           <span class="spacer"></span>
+          <button class="ghost-btn sm" id="gloss-import">Importar JSON</button>
+          <input type="file" id="gloss-import-file" accept="application/json,.json" hidden />
           <button class="ghost-btn sm" id="gloss-export">Exportar JSON</button>
           <button class="ghost-btn sm" id="gloss-clear">Limpar</button>
         </div>
