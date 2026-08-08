@@ -27,14 +27,15 @@ The base application is **fully offline**. Heavy optional engines (OCR runtimes,
 | **Convert** | 14 office/OpenDocument/RTF/EPUB/CSV/PDF formats → clean GitHub-Flavored Markdown ([anydoc](https://github.com/firecrawl/anydoc)) |
 | **Inspect** | Rendered preview, live-editable Markdown source, parsed block structure, embedded assets gallery |
 | **PDF analysis** | Type (text/scanned/mixed), confidence, per-page OCR routing, layout complexity, encoding health ([pdf-inspector](https://github.com/firecrawl/pdf-inspector)) |
-| **OCR (local)** | Images and scanned PDFs, two selectable engines: **Tesseract.js** (light) and **PaddleOCR PP-OCRv5** (accurate, ONNX) |
-| **Positions** | Bounding-box overlay of every detected region + an **edit mode** to move, resize, delete, and edit boxes on the page |
-| **Translation** | **Layout-preserving**, real-time, in-document substitution. Batch translation with document-type context, a glossary, and automatic source-language detection (40+ languages) |
+| **OCR (local)** | Images and scanned PDFs, two selectable engines: **Tesseract.js** (light) and **PaddleOCR PP-OCRv5** (accurate, ONNX). Per-region **confidence** and a **Cancel** button that stops a long run immediately |
+| **Positions** | Bounding-box overlay of every detected region, tinted by OCR confidence (isolate the low-confidence ones), + an **edit mode** to move, resize, delete, and edit boxes — by mouse **or keyboard** |
+| **Translation** | **Layout-preserving**, real-time, in-document substitution that **streams in region by region**. Batch translation with document-type context, a glossary, and automatic source-language detection (40+ languages) |
 | **Ask (RAG)** | Ask questions about a document and get grounded answers **with citations** — chunking + local embeddings (Ollama) + your chosen LLM, entirely in the browser |
 | **Scraping** | Paste a URL → clean Markdown ([Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown)); a small local proxy handles CORS-restricted sites |
 | **Export** | Download the translation as Markdown, or as a **layout-preserving PDF** with the translated text baked onto each page |
 | **Word bank** | A translation memory of terms → translations, bucketed by language and document type, reused as context |
 | **Installable (PWA)** | Install it as an app; a service worker caches the shell and assets so it keeps working offline |
+| **Accessibility** | Region rows and text boxes are keyboard-operable and labelled for assistive tech; OCR and translation progress announce via ARIA live regions |
 | **Persistence** | Uploads, OCR results, and translations survive a refresh (IndexedDB) |
 
 ### Translation engines
